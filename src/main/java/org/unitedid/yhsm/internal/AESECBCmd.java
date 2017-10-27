@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2011 United ID.
+ * Copyright (c) 2017 Florian Zschocke  Added byte array versions of commands
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,14 +38,30 @@ public class AESECBCmd {
      * @throws YubiHSMCommandFailedException if the YubiHSM fail to execute the command
      */
     public static String encrypt(DeviceHandler deviceHandler, int keyHandle, String plaintext) throws YubiHSMInputException, YubiHSMErrorException, YubiHSMCommandFailedException {
-        byte[] cmdBuffer = concatAllArrays(leIntToBA(keyHandle), validateByteArray("plaintext", plaintext.getBytes(), YSM_BLOCK_SIZE, 0, YSM_BLOCK_SIZE));
-        byte[] result = CommandHandler.execute(deviceHandler, YSM_AES_ECB_BLOCK_ENCRYPT, cmdBuffer, true);
-
-        return parseResult(result, keyHandle, YSM_AES_ECB_BLOCK_ENCRYPT, false);
+        byte[] result = encrypt(deviceHandler, keyHandle, plaintext.getBytes());
+        return byteArrayToHex(result);
     }
 
     /**
-     * AES ECB decrypt a cipher text using a specific key handle.
+     * AES ECB encrypt a plaintext byte array using a specific key handle.
+     *
+     * @param deviceHandler the device handler
+     * @param keyHandle the key handle to use when encrypting AES ECB
+     * @param plaintext the plaintext byte array
+     * @return ciphertext byte array
+     * @throws YubiHSMInputException if an argument does not validate
+     * @throws YubiHSMErrorException if validation fail for some values returned by the YubiHSM
+     * @throws YubiHSMCommandFailedException if the YubiHSM fail to execute the command
+     */
+    public static byte[] encrypt(DeviceHandler deviceHandler, int keyHandle, byte[] plaintext) throws YubiHSMInputException, YubiHSMErrorException, YubiHSMCommandFailedException {
+        byte[] cmdBuffer = concatAllArrays(leIntToBA(keyHandle), validateByteArray("plaintext", plaintext, YSM_BLOCK_SIZE, 0, YSM_BLOCK_SIZE));
+        byte[] result = CommandHandler.execute(deviceHandler, YSM_AES_ECB_BLOCK_ENCRYPT, cmdBuffer, true);
+
+        return parseResult(result, keyHandle, YSM_AES_ECB_BLOCK_ENCRYPT);
+    }
+
+    /**
+     * AES ECB decrypt a cipher text string using a specific key handle.
      *
      * @param deviceHandler the device handler
      * @param keyHandle the key handle to use when decrypting AES ECB
@@ -55,10 +72,26 @@ public class AESECBCmd {
      * @throws YubiHSMCommandFailedException if the YubiHSM fail to execute the command
      */
     public static String decrypt(DeviceHandler deviceHandler, int keyHandle, String cipherText) throws YubiHSMErrorException, YubiHSMInputException, YubiHSMCommandFailedException {
-        byte[] cmdBuffer = concatAllArrays(leIntToBA(keyHandle), validateByteArray("cipherText", hexToByteArray(cipherText), 0, YSM_BLOCK_SIZE, 0));
+        byte[] result = decrypt(deviceHandler, keyHandle, hexToByteArray(cipherText));
+        return new String(result).trim();
+    }
+
+    /**
+     * AES ECB decrypt a cipher text using a specific key handle.
+     *
+     * @param deviceHandler the device handler
+     * @param keyHandle the key handle to use when decrypting AES ECB
+     * @param cipherText the cipher byte array
+     * @return a plaintext byte array
+     * @throws YubiHSMInputException if an argument does not validate
+     * @throws YubiHSMErrorException if validation fail for some values returned by the YubiHSM
+     * @throws YubiHSMCommandFailedException if the YubiHSM fail to execute the command
+     */
+    public static byte[] decrypt(DeviceHandler deviceHandler, int keyHandle, byte[] cipherText) throws YubiHSMErrorException, YubiHSMInputException, YubiHSMCommandFailedException {
+        byte[] cmdBuffer = concatAllArrays(leIntToBA(keyHandle), validateByteArray("cipherText", cipherText, 0, YSM_BLOCK_SIZE, 0));
         byte[] result = CommandHandler.execute(deviceHandler, YSM_AES_ECB_BLOCK_DECRYPT, cmdBuffer, true);
 
-        return parseResult(result, keyHandle, YSM_AES_ECB_BLOCK_DECRYPT, true);
+        return parseResult(result, keyHandle, YSM_AES_ECB_BLOCK_DECRYPT);
     }
 
     /**
@@ -74,8 +107,24 @@ public class AESECBCmd {
      * @throws YubiHSMCommandFailedException if the YubiHSM fail to execute the command
      */
     public static boolean compare(DeviceHandler deviceHandler, int keyHandle, String cipherText, String plaintext) throws YubiHSMInputException, YubiHSMErrorException, YubiHSMCommandFailedException {
-        byte[] cipherTextBA = validateByteArray("cipherText", hexToByteArray(cipherText), 0, YSM_BLOCK_SIZE, 0);
-        byte[] plaintextBA = validateByteArray("plaintext", plaintext.getBytes(), YSM_BLOCK_SIZE, 0, YSM_BLOCK_SIZE);
+        return compare(deviceHandler, keyHandle, hexToByteArray(cipherText), plaintext.getBytes());
+    }
+
+    /**
+     * AES ECB decrypt a cipher text using a specific key handle, and then compare it with the supplied plaintext.
+     *
+     * @param deviceHandler the device handler
+     * @param keyHandle the key handle to use when comparing AES ECB cipher with plaintext
+     * @param cipherText the cipher byte array
+     * @param plaintext the plaintext byte array
+     * @return true if successful, false if not successful
+     * @throws YubiHSMInputException if an argument does not validate
+     * @throws YubiHSMErrorException if validation fail for some values returned by the YubiHSM
+     * @throws YubiHSMCommandFailedException if the YubiHSM fail to execute the command
+     */
+    public static boolean compare(DeviceHandler deviceHandler, int keyHandle, byte[] cipherText, byte[] plaintext) throws YubiHSMInputException, YubiHSMErrorException, YubiHSMCommandFailedException {
+        byte[] cipherTextBA = validateByteArray("cipherText", cipherText, 0, YSM_BLOCK_SIZE, 0);
+        byte[] plaintextBA = validateByteArray("plaintext", plaintext, YSM_BLOCK_SIZE, 0, YSM_BLOCK_SIZE);
         byte[] keyHandleBA = leIntToBA(keyHandle);
         byte[] cmdBuffer = concatAllArrays(keyHandleBA, cipherTextBA, plaintextBA);
         byte[] result = CommandHandler.execute(deviceHandler, YSM_AES_ECB_BLOCK_DECRYPT_CMP, cmdBuffer, true);
@@ -97,17 +146,16 @@ public class AESECBCmd {
      * @param data the YubiHSM response data
      * @param keyHandle the key handle used for the command
      * @param command the YubiHSM command executed
-     * @param decrypt a boolean used to toggle if we decrypt (if true plaintext is returned, otherwise a hex string)
-     * @return a plaintext string or hex string
+     * @return the result payload byte array
      * @throws YubiHSMErrorException if validation fail for some values returned by the YubiHSM
      * @throws YubiHSMCommandFailedException if the YubiHSM fail to execute the command
      */
-    private static String parseResult(byte[] data, int keyHandle, byte command, boolean decrypt) throws YubiHSMErrorException, YubiHSMCommandFailedException {
+    private static byte[] parseResult(byte[] data, int keyHandle, byte command) throws YubiHSMErrorException, YubiHSMCommandFailedException {
         validateCmdResponseBA("keyHandle", rangeOfByteArray(data, 0, 4), leIntToBA(keyHandle));
         byte[] result = rangeOfByteArray(data, 4, YSM_BLOCK_SIZE);
 
         if (data[20] == YSM_STATUS_OK) {
-            return decrypt ? new String(result).trim() : byteArrayToHex(result);
+            return result;
         } else {
             throw new YubiHSMCommandFailedException("Command " + getCommandString(command) + " failed: " + getCommandStatus(data[20]));
         }
